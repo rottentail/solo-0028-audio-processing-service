@@ -1,0 +1,12 @@
+{
+  "language":"Go",
+  "project_shape":"backend",
+  "source_extensions":[".go"],
+  "build_command":"go build ./...",
+  "testing":"deferred",
+  "workflow_checks":[
+    {"workflow_id":"inspect","command":"python3 scripts/smoke.py inspect"},
+    {"workflow_id":"clip","command":"python3 scripts/smoke.py clip"},
+    {"workflow_id":"gain","command":"python3 scripts/smoke.py gain"}
+  ]
+}

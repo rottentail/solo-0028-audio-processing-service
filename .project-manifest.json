@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "solo-0027-audio-processing-service",
+  "project_shape": "backend",
+  "modules": [
+    {"id":"entry","path":"cmd/audioserve","responsibility":"HTTP process lifecycle"},
+    {"id":"api","path":"internal/httpapi","responsibility":"HTTP validation and response mapping"},
+    {"id":"wav","path":"internal/wav","responsibility":"RIFF PCM decoding and encoding"},
+    {"id":"audio","path":"internal/audio","responsibility":"frame transformations"}
+  ],
+  "complexity":{"mechanisms":["error_propagation","resource_lifecycle","validation_boundaries"]},
+  "workflows":[
+    {"id":"inspect","name":"Inspect WAV","entry":"POST /v1/inspect","steps":["bound and decode request","calculate and return metadata"],"success":"returns PCM metadata","failure":"rejects malformed or unsupported audio","verification":"offline HTTP smoke check","module_ids":["entry","api","wav"]},
+    {"id":"clip","name":"Clip WAV","entry":"POST /v1/clip","steps":["decode and validate frame range","slice frames and encode WAV"],"success":"returns selected frames","failure":"rejects invalid ranges and media","verification":"offline HTTP smoke check","module_ids":["entry","api","wav","audio"]},
+    {"id":"gain","name":"Adjust gain","entry":"POST /v1/gain","steps":["decode and validate multiplier","scale samples and encode WAV"],"success":"returns saturated PCM","failure":"rejects invalid multiplier and media","verification":"offline HTTP smoke check","module_ids":["entry","api","wav","audio"]}
+  ]
+}

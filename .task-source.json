@@ -1,0 +1,15 @@
+{
+  "task_source_schema_version":1,
+  "entities":[
+    {"id":"stream","label":"PCM stream","relations":["clip references stream frames"],"invariants":["samples align to whole frames","only 16-bit mono or stereo PCM"]},
+    {"id":"clip","label":"Frame interval","relations":["clip belongs to stream"],"invariants":["start is inclusive and end exclusive","interval lies within stream"]}
+  ],
+  "state_machines":[{"subject":"request","states":["received","validated","completed","rejected"],"transitions":["received->validated","received->rejected","validated->completed","validated->rejected"],"invariants":["rejected requests produce no audio output"]}],
+  "capability_families":[{"family":"媒体解析与编码","occupied_by":["PCM WAV"],"available":true},{"family":"音频变换","occupied_by":["frame clip","gain"],"available":true}],
+  "extension_seams":[{"id":"formats","anchor":"internal/wav","entry":"Decode and Encode","distinct_outcome":"additional media formats","mechanism":"format validation"}],
+  "tension_points":[
+    {"workflow_id":"inspect","description":"RIFF chunk boundaries versus actual body length","observable_failure":"truncated input reported as valid metadata"},
+    {"workflow_id":"clip","description":"sample indices versus interleaved frame boundaries","observable_failure":"channels become misaligned"},
+    {"workflow_id":"gain","description":"amplification versus signed sample range","observable_failure":"overflow wraps instead of saturating"}
+  ]
+}
