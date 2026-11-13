@@ -39,10 +39,18 @@ curl -X POST http://127.0.0.1:8080/v1/jobs/JOB_ID/retry
 
 Operations are `video-mp4`, `audio-m4a`, and `thumbnail`. Query the job before retrieving output: only `completed` jobs expose it. A full queue returns 503. Cancellation is persistent; retry can return 409 until the old process exits. On restart, unfinished jobs become `failed` and can be retried explicitly. The API stores media and metadata on disk; it does not execute arbitrary user-provided FFmpeg arguments.
 
+Video jobs can specify `start` and `duration` together in seconds, and `width` and `height` together in pixels. Start must be 0 to 86400, duration greater than 0 and at most 3600, and dimensions even and between 16x16 and 1920x1080. Video is scaled to fit and padded without changing its aspect ratio. The same time interval is applied to audio. For example:
+
+```sh
+curl --data-binary @input.mp4 'http://127.0.0.1:8080/v1/jobs?operation=video-mp4&start=1.5&duration=2&width=640&height=360'
+```
+
+Parameters are stored with the job and reused for every attempt. Output decoding is checked before the job becomes completed. No duration probing or exact frame-boundary guarantee is offered; encoding timestamps and source keyframes affect the available frames.
+
 An abrupt service termination cannot guarantee that its FFmpeg child has exited. Each attempt uses a distinct temporary output name so a retry cannot consume that child's output; an orphan process or temporary file may still require operating-system supervision or cleanup. The service does not provide power-loss durability guarantees.
 
 ## Structure and checks
 
-`cmd/audioserve` contains the process entry point, `internal/httpapi` the HTTP boundary, `internal/wav` RIFF parsing and encoding, `internal/audio` frame transforms, and `internal/jobs` persistent job execution. Run `python3 scripts/smoke.py inspect`, `python3 scripts/smoke.py clip`, and `python3 scripts/smoke.py gain`, plus `python3 scripts/media-smoke.py video-mp4`, `audio-m4a`, and `thumbnail` (each passed as the script argument) for independent offline HTTP checks.
+`cmd/audioserve` contains the process entry point, `internal/httpapi` the HTTP boundary, `internal/wav` RIFF parsing and encoding, `internal/audio` frame transforms, `internal/profile` processing parameters, and `internal/jobs` persistent job execution. Run `python3 scripts/smoke.py inspect`, `python3 scripts/smoke.py clip`, and `python3 scripts/smoke.py gain`, plus `python3 scripts/media-smoke.py` with `video-mp4`, `audio-m4a`, `thumbnail`, or `video-profile`, and `python3 scripts/control-smoke.py` for independent offline HTTP checks.
 
 Automated test files are intentionally deferred. A later engineering task should add unit, fuzz, concurrency, crash-recovery and HTTP integration tests; the smoke checks exercise production entry points in the meantime. Arbitrary filters, streaming input, multi-host workers and automatic storage cleanup are outside this baseline.

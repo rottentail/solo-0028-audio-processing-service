@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"audio-processing-service/internal/profile"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -23,13 +24,14 @@ var ErrFull = errors.New("job queue is full")
 var ErrInvalid = errors.New("invalid job input")
 
 type Job struct {
-	ID        string    `json:"id"`
-	Operation string    `json:"operation"`
-	State     string    `json:"state"`
-	Error     string    `json:"error,omitempty"`
-	Created   time.Time `json:"created"`
-	Updated   time.Time `json:"updated"`
-	Attempt   int       `json:"attempt"`
+	ID        string           `json:"id"`
+	Operation string           `json:"operation"`
+	State     string           `json:"state"`
+	Error     string           `json:"error,omitempty"`
+	Created   time.Time        `json:"created"`
+	Updated   time.Time        `json:"updated"`
+	Attempt   int              `json:"attempt"`
+	Settings  profile.Settings `json:"settings"`
 }
 
 type Manager struct {
@@ -143,7 +145,7 @@ func (m *Manager) transition(j *Job, state, detail string) error {
 	}
 	return nil
 }
-func (m *Manager) Create(operation string, input io.Reader) (Job, error) {
+func (m *Manager) Create(operation string, settings profile.Settings, input io.Reader) (Job, error) {
 	if operation != "video-mp4" && operation != "audio-m4a" && operation != "thumbnail" {
 		return Job{}, fmt.Errorf("%w: unsupported operation", ErrInvalid)
 	}
@@ -177,7 +179,7 @@ func (m *Manager) Create(operation string, input io.Reader) (Job, error) {
 		return Job{}, fmt.Errorf("%w: input must be between 1 byte and 64 MiB", ErrInvalid)
 	}
 	now := time.Now().UTC()
-	j := &Job{ID: id, Operation: operation, State: "queued", Created: now, Updated: now, Attempt: 1}
+	j := &Job{ID: id, Operation: operation, State: "queued", Created: now, Updated: now, Attempt: 1, Settings: settings}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.ctx.Err() != nil {
@@ -301,6 +303,7 @@ func (m *Manager) run(id string) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.cancels[id] = cancel
 	operation := j.Operation
+	settings := j.Settings
 	attempt := j.Attempt
 	m.mu.Unlock()
 	dir := filepath.Join(m.root, id)
@@ -309,7 +312,8 @@ func (m *Manager) run(id string) {
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", filepath.Join(dir, "input")}
 	switch operation {
 	case "video-mp4":
-		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-movflags", "+faststart", "-f", "mp4")
+		args = append(args, settings.VideoArgs()...)
+		args = append(args, "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-movflags", "+faststart", "-f", "mp4")
 	case "audio-m4a":
 		args = append(args, "-map", "0:a:0", "-vn", "-c:a", "aac", "-f", "ipod")
 	case "thumbnail":
@@ -319,6 +323,18 @@ func (m *Manager) run(id string) {
 	runctx, timeout := context.WithTimeout(ctx, 5*time.Minute)
 	cmd := exec.CommandContext(runctx, m.ffmpeg, args...)
 	err := cmd.Run()
+	if err == nil {
+		stream := "0:v:0"
+		if operation == "audio-m4a" {
+			stream = "0:a:0"
+		}
+		check := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-i", temp, "-map", stream}
+		if operation != "audio-m4a" {
+			check = append(check, "-frames:v", "1")
+		}
+		check = append(check, "-f", "null", "-")
+		err = exec.CommandContext(runctx, m.ffmpeg, check...).Run()
+	}
 	timeout()
 	cancel()
 	m.mu.Lock()

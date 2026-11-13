@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"audio-processing-service/internal/jobs"
+	"audio-processing-service/internal/profile"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,8 +16,13 @@ func RegisterJobs(mux *http.ServeMux, manager *jobs.Manager) {
 		case http.MethodGet:
 			writeJSON(w, 200, manager.List())
 		case http.MethodPost:
+			settings, err := profile.Parse(r.URL.Query().Get("operation"), r.URL.Query())
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
 			r.Body = http.MaxBytesReader(w, r.Body, (64<<20)+1)
-			j, err := manager.Create(r.URL.Query().Get("operation"), r.Body)
+			j, err := manager.Create(r.URL.Query().Get("operation"), settings, r.Body)
 			if err != nil {
 				jobError(w, err)
 				return

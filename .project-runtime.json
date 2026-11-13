@@ -11,6 +11,7 @@
     {"workflow_id":"video-mp4","command":"python3 scripts/media-smoke.py video-mp4"},
     {"workflow_id":"audio-m4a","command":"python3 scripts/media-smoke.py audio-m4a"},
     {"workflow_id":"thumbnail","command":"python3 scripts/media-smoke.py thumbnail"},
-    {"workflow_id":"job-control","command":"python3 scripts/control-smoke.py"}
+    {"workflow_id":"job-control","command":"python3 scripts/control-smoke.py"},
+    {"workflow_id":"video-profile","command":"python3 scripts/media-smoke.py video-profile"}
   ]
 }

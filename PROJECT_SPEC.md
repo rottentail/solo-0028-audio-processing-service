@@ -12,12 +12,14 @@ An audio stream has a sample rate, channel count, bit depth, frame count and int
 2. Clip: validate a frame interval, slice full frames and encode the result as WAV.
 3. Gain: validate a multiplier, scale and saturate samples, and encode a WAV result.
 4. Transcode video to MP4, extract an M4A audio track, or extract a JPEG frame through an asynchronous job. A bounded queue and two workers limit concurrent FFmpeg processes. Jobs may be cancelled while queued or running; failed or cancelled jobs may be retried after any running process exits. A restarted service marks unfinished jobs failed and retains their input for explicit retry.
+5. Submit a video job with a paired start and duration and/or even canvas dimensions. The selected time applies to both audio and video. Video frames are scaled without distortion and padded to the requested canvas. Parameters are fixed in the job record across retries. Results are decoded before they become available.
 
 ## Modules and interfaces
 
 `cmd/audioserve` starts the server; `internal/httpapi` validates HTTP inputs and maps errors; `internal/wav` decodes and encodes RIFF PCM; `internal/audio` implements frame operations. POST `/v1/inspect`, `/v1/clip?start=0&end=1`, and `/v1/gain?factor=1.5` accept WAV bodies. A GET `/healthz` indicates process availability.
 
 `internal/jobs` owns durable job records, queue admission, process cancellation and output publication. POST `/v1/jobs?operation=video-mp4`, `audio-m4a`, or `thumbnail` submits media bytes. GET `/v1/jobs` lists records; GET `/v1/jobs/{id}` reads status; GET `/v1/jobs/{id}/output` retrieves completed output; DELETE cancels; POST `/v1/jobs/{id}/retry` retries. Each data directory must be used by only one service process.
+`internal/profile` validates paired temporal and spatial parameters and constructs the corresponding FFmpeg arguments.
 
 ## Validation plan
 
