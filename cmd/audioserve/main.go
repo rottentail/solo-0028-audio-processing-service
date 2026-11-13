@@ -2,6 +2,7 @@ package main
 
 import (
 	"audio-processing-service/internal/httpapi"
+	"audio-processing-service/internal/jobs"
 	"context"
 	"errors"
 	"log"
@@ -17,7 +18,23 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-	server := &http.Server{Addr: addr, Handler: httpapi.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	root := os.Getenv("AUDIO_DATA_DIR")
+	if root == "" {
+		root = "./audio-data"
+	}
+	ffmpeg := os.Getenv("FFMPEG_PATH")
+	if ffmpeg == "" {
+		ffmpeg = "ffmpeg"
+	}
+	manager, err := jobs.Open(root, ffmpeg, 2, 32)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer manager.Close()
+	mux := http.NewServeMux()
+	httpapi.RegisterJobs(mux, manager)
+	mux.Handle("/", httpapi.Handler())
+	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

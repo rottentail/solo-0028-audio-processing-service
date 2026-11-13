@@ -1,10 +1,10 @@
 # Audio Processing Service
 
-A Go HTTP service for inspecting and transforming uncompressed WAV audio without retaining request bodies. It supports little-endian integer PCM, 16-bit samples, and one or two channels. Inputs are limited to 16 MiB. Unsupported encodings, malformed chunks and invalid parameters return HTTP 400; oversized bodies return 413.
+A Go HTTP service for synchronous PCM WAV operations and asynchronous audio/video conversion. WAV requests support little-endian integer PCM, 16-bit samples, and one or two channels, with a 16 MiB limit. Media jobs accept up to 64 MiB. Unsupported encodings, malformed chunks and invalid parameters return HTTP 400; oversized WAV bodies return 413.
 
 ## Run
 
-Requires Go 1.22 or newer. Python 3 is needed only for the smoke checks.
+Requires Go 1.22 or newer and FFmpeg with libx264 and AAC support on PATH. Python 3 is needed only for the smoke checks. Set `FFMPEG_PATH` to select a different executable.
 
 ```sh
 go build ./...
@@ -12,6 +12,8 @@ go run ./cmd/audioserve
 ```
 
 `AUDIO_LISTEN` controls the listening address; the default is `127.0.0.1:8080`. The service has no authentication and should be deployed behind an appropriate trusted gateway when exposed to other hosts.
+
+`AUDIO_DATA_DIR` selects persistent job storage (default `./audio-data`). Use a dedicated directory for one service process only; no cross-process locking, quota, automatic expiration, or deletion is provided. Retained inputs can contain sensitive data. Configure external disk quotas and cleanup according to the deployment's needs. Two workers process at most 32 waiting jobs; processing is limited to five minutes per attempt.
 
 ## HTTP API
 
@@ -25,8 +27,22 @@ curl --data-binary @input.wav 'http://127.0.0.1:8080/v1/gain?factor=1.5' -o loud
 
 Clip bounds are zero-based frame indices, with an inclusive start and exclusive end. Gain ranges from 0 to 4 and saturates at 16-bit limits. Output is newly encoded PCM; ancillary WAV chunks are not preserved. `GET /healthz` checks availability.
 
+Submit media bytes for asynchronous processing:
+
+```sh
+curl --data-binary @input.mp4 'http://127.0.0.1:8080/v1/jobs?operation=video-mp4'
+curl http://127.0.0.1:8080/v1/jobs/JOB_ID
+curl http://127.0.0.1:8080/v1/jobs/JOB_ID/output -o result.mp4
+curl -X DELETE http://127.0.0.1:8080/v1/jobs/JOB_ID
+curl -X POST http://127.0.0.1:8080/v1/jobs/JOB_ID/retry
+```
+
+Operations are `video-mp4`, `audio-m4a`, and `thumbnail`. Query the job before retrieving output: only `completed` jobs expose it. A full queue returns 503. Cancellation is persistent; retry can return 409 until the old process exits. On restart, unfinished jobs become `failed` and can be retried explicitly. The API stores media and metadata on disk; it does not execute arbitrary user-provided FFmpeg arguments.
+
+An abrupt service termination cannot guarantee that its FFmpeg child has exited. Each attempt uses a distinct temporary output name so a retry cannot consume that child's output; an orphan process or temporary file may still require operating-system supervision or cleanup. The service does not provide power-loss durability guarantees.
+
 ## Structure and checks
 
-`cmd/audioserve` contains the process entry point, `internal/httpapi` the HTTP boundary, `internal/wav` RIFF parsing and encoding, and `internal/audio` frame transforms. Run `python3 scripts/smoke.py inspect`, `python3 scripts/smoke.py clip`, and `python3 scripts/smoke.py gain` for independent offline HTTP workflow checks.
+`cmd/audioserve` contains the process entry point, `internal/httpapi` the HTTP boundary, `internal/wav` RIFF parsing and encoding, `internal/audio` frame transforms, and `internal/jobs` persistent job execution. Run `python3 scripts/smoke.py inspect`, `python3 scripts/smoke.py clip`, and `python3 scripts/smoke.py gain`, plus `python3 scripts/media-smoke.py video-mp4`, `audio-m4a`, and `thumbnail` (each passed as the script argument) for independent offline HTTP checks.
 
-Automated test files are intentionally deferred. A later engineering task should add unit, fuzz, and HTTP integration tests; the smoke checks exercise production entry points in the meantime. Compressed media, video, streaming uploads, and persistent storage are outside this baseline.
+Automated test files are intentionally deferred. A later engineering task should add unit, fuzz, concurrency, crash-recovery and HTTP integration tests; the smoke checks exercise production entry points in the meantime. Arbitrary filters, streaming input, multi-host workers and automatic storage cleanup are outside this baseline.

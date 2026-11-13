@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory() as temp:
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    env = dict(os.environ, AUDIO_LISTEN='127.0.0.1:%d' % port)
+    env = dict(os.environ, AUDIO_LISTEN='127.0.0.1:%d' % port, AUDIO_DATA_DIR=os.path.join(temp, 'data'))
     process = subprocess.Popen([binary], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     base = 'http://127.0.0.1:%d' % port
     try:
