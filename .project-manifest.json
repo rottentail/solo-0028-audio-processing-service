@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "name": "solo-0027-audio-processing-service",
+  "name": "solo-0028-audio-processing-service",
   "project_shape": "backend",
   "modules": [
     {"id":"entry","path":"cmd/audioserve","responsibility":"HTTP process lifecycle"},
